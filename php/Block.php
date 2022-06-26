@@ -63,66 +63,120 @@ class Block {
 	 * @return string The markup of the block.
 	 */
 	public function render_callback( $attributes, $content, $block ) {
-		$post_types = get_post_types(  [ 'public' => true ] );
+		$post_types = get_post_types( [ 'public' => true ] );
 		$class_name = $attributes['className'];
+
 		ob_start();
 
 		?>
-        <div class="<?php echo $class_name; ?>">
-			<h2>Post Counts</h2>
-			<ul>
-			<?php
-			foreach ( $post_types as $post_type_slug ) :
-                $post_type_object = get_post_type_object( $post_type_slug  );
-                $post_count = count(
-                    get_posts(
-						[
-							'post_type' => $post_type_slug,
-							'posts_per_page' => -1,
-						]
-					)
-                );
+			<div class="<?php echo esc_attr( $class_name ); ?>">
+				<h2> <?php _e( 'Post Counts', 'site-counts' ); ?> </h2>
 
+				<ul>
+					<?php
+						foreach ( $post_types as $post_type_slug ) :
+							$post_type_object = get_post_type_object( $post_type_slug );
+							$post_count = wp_count_posts( $post_type_slug );
+							?>
+								<li>
+									<?php
+										/* translators: 1: Translatable text, 2: Post count, 3: Post type name */
+										printf(
+											'%1$s %2$s %3$s',
+											__( 'There are', 'site-counts' ),
+											$post_count->publish,
+											esc_html( $post_type_object->labels->name )
+										);
+									?>
+								</li>
+							<?php
+						endforeach;
+					?>
+				</ul>
+
+				<?php
+					$post_id = ( isset( $_GET['post_id'] ) && absint( $_GET['post_id'] ) ) ? $_GET['post_id'] : get_the_ID();
+					printf(
+						'<p> %s </p>',
+						esc_html( sprintf(
+							/* translators: %d: A post ID. */
+							__( 'The current post ID is %d.', 'site-counts' ),
+							$post_id
+						) )
+					);
+
+					$this->get_foo_baz_tax_posts( $post_id );
 				?>
-				<li><?php echo 'There are ' . $post_count . ' ' .
-					  $post_type_object->labels->name . '.'; ?></li>
-			<?php endforeach;	?>
-			</ul><p><?php echo 'The current post ID is ' . $_GET['post_id'] . '.'; ?></p>
-
-			<?php
-			$query = new WP_Query(  array(
-				'post_type' => ['post', 'page'],
-				'post_status' => 'any',
-				'date_query' => array(
-					array(
-						'hour'      => 9,
-						'compare'   => '>=',
-					),
-					array(
-						'hour' => 17,
-						'compare'=> '<=',
-					),
-				),
-                'tag'  => 'foo',
-                'category_name'  => 'baz',
-				  'post__not_in' => [ get_the_ID() ],
-			));
-
-			if ( $query->have_posts() ) :
-				?>
-				 <h2>5 posts with the tag of foo and the category of baz</h2>
-                <ul>
-                <?php
-
-                 foreach ( array_slice( $query->posts, 0, 5 ) as $post ) :
-                    ?><li><?php echo $post->post_title ?></li><?php
-				endforeach;
-			endif;
-		 	?>
-			</ul>
-		</div>
+			</div>
 		<?php
 
 		return ob_get_clean();
+	}
+
+	/**
+	 * Retrieve posts associated with taxonomy Foo and Baz.
+	 *
+	 * @param int $post_id - The post ID.
+	 * @return void
+	 */
+	private function get_foo_baz_tax_posts( $post_id ) {
+		$query = new WP_Query(
+			[
+				'post_type'				 => [ 'post', 'page' ],
+				'post_status'			 => 'any',
+				'date_query' => [
+					[
+						'hour'      => 9,
+						'compare'   => '>=',
+					],
+					[
+						'hour'		=> 17,
+						'compare'	=> '<=',
+					],
+				],
+				'tag'					 => 'foo',
+				'category_name'			 => 'baz',
+				'no_found_rows'			 => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			]
+		);
+
+		if ( $query->have_posts() ) :
+			$post_count = 0;
+			foreach ( $query->posts as $post ) {
+				if ( $post->ID !== $post_id ) {
+					$post_count++;
+				}
+			}
+			?>
+				<h2>
+					<?php
+						/* translators: 1: Post count, 2: Translatable text */
+						printf( '%d %s',
+							$post_count,
+							__( 'posts with the tag of foo and the category of baz', 'site-counts' ),
+						);
+					?>
+				</h2>
+
+				<ul>
+					<?php
+						$count = 0;
+						while ( $query->have_posts() ) :
+							$query->the_post();
+							$count++;
+							if ( $post_id === the_ID() ) continue;
+							?>
+								<li> <?php the_title(); ?> </li>
+							<?php
+								if ( $count > 5 ) break;
+						endwhile;
+					?>
+				</ul>
+			<?php
+
+			wp_reset_postdata();
+		endif;
 	}
 }
